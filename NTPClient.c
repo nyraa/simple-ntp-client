@@ -39,16 +39,16 @@ struct ntp_packet
     uint32_t tx_ts_sec;      // transmit timestamp (seconds)
     uint32_t tx_ts_frac;     // transmit timestamp (fractions of a second)
 };
-
+typedef struct timeval timeval_t;
 
 int main()
 {
-    struct timeval offset;
+    timeval_t offset;
     int code = sync(&offset);
     printf("offset: %lds + %ld us\n", offset.tv_sec, offset.tv_usec);
     return 0;
 
-    struct timeval now;
+    timeval_t now;
     gettimeofday(&now, NULL);
     tv_over2(offset);
     tv_add(offset, now, now);
@@ -58,7 +58,7 @@ int main()
 
     return 0;
 }
-int sync(struct timeval* offset)
+int sync(timeval_t* offset)
 {
     int sockfd = 0, n;
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -67,7 +67,7 @@ int sync(struct timeval* offset)
         perror("socket creation failed");
         return n;
     }
-    struct timeval timeout = {0.5, 0};
+    timeval_t timeout = {0.5, 0};
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
 
     struct sockaddr_in server_addr;
@@ -82,7 +82,7 @@ int sync(struct timeval* offset)
     packet.li_vn_mode = 0b11 << 6 | 0b100 << 3 | 0b011;
 
     // get timestamp before request
-    struct timeval t0;
+    timeval_t t0;
     gettimeofday(&t0, NULL);
     packet.orig_ts_sec = htonl(t0.tv_sec + OFFSET);
 
@@ -97,7 +97,7 @@ int sync(struct timeval* offset)
     n = recv(sockfd, &packet, sizeof(packet), 0);
 
     // get timestamp when receive response
-    struct timeval t3;
+    timeval_t t3;
     gettimeofday(&t3, NULL);
 
     if(n < 0)
@@ -110,14 +110,14 @@ int sync(struct timeval* offset)
 
     uint32_t ts1_sec = ntohl(packet.recv_ts_sec) - OFFSET;
     uint32_t ts1_frac = ntohl(packet.recv_ts_frac);
-    struct timeval ts1 = {ts1_sec, frac2us(ts1_frac)};
+    timeval_t ts1 = {ts1_sec, frac2us(ts1_frac)};
 
     uint32_t ts2_sec = ntohl(packet.tx_ts_sec) - OFFSET;
     uint32_t ts2_frac = ntohl(packet.tx_ts_frac);
-    struct timeval ts2 = {ts2_sec, frac2us(ts2_frac)};
+    timeval_t ts2 = {ts2_sec, frac2us(ts2_frac)};
 
     // calc delta
-    struct timeval delta;
+    timeval_t delta;
     delta.tv_sec = (t3.tv_sec - t0.tv_sec) - (ts2_sec - ts1_sec);
     int carry;
     uint32_t ts2_to_ts3_frac;
@@ -128,19 +128,19 @@ int sync(struct timeval* offset)
     printf("delta: %lu s + %lu us\n", delta.tv_sec, delta.tv_usec);
 
     // calc offset
-    def_set(struct timeval, half_delta, delta);
+    def_set(timeval_t, half_delta, delta);
     tv_over2(half_delta);
 
     // correct by delta
-    def_set(struct timeval, t1, ts1);
-    def_set(struct timeval, t2, ts2);
+    def_set(timeval_t, t1, ts1);
+    def_set(timeval_t, t2, ts2);
 
     tv_sub(ts1, half_delta, t1);
     tv_add(ts2, half_delta, t2);
 
-    struct timeval t0_2_t1;
+    timeval_t t0_2_t1;
     tv_sub(t1, t0, t0_2_t1);
-    struct timeval t2_2_t3;
+    timeval_t t2_2_t3;
     tv_sub(t2, t3, t2_2_t3);
 
     tv_add(t0_2_t1, t2_2_t3, *offset);
